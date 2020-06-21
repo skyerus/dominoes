@@ -1,4 +1,5 @@
 import React, {useEffect} from "react"
+import Domino from './domino'
 
 import coreApi from '../api/core'
 
@@ -28,6 +29,10 @@ export default function Game(props) {
   }
 
   return (
-    <div>GAME</div>
+    <div>
+      <div style={{position: "absolute", bottom: "0", marginLeft: "20px", marginRight: "20px"}}>
+        <Domino left={0} right={1} vertical={true}/>
+      </div>
+    </div>
   )
 }
