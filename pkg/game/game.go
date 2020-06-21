@@ -1,19 +1,22 @@
 package game
 
 import (
+	"errors"
 	"math"
 	"math/rand"
 	"strconv"
-	"time"
 
 	"github.com/skyerus/dominoes/pkg/customerror"
 )
 
 // Session - game session state
 type Session struct {
-	Players        *[]player `json:"players"`
+	Players        []*player `json:"players"`
 	PlayedTiles    *[]tile   `json:"played_tiles"`
 	RemainingTiles *[]tile   `json:"remaining_tiles"`
+	PlayersTurn    int       `json:"players_turn"`
+	Gameover       bool      `json:"gameover"`
+	Playerwins     bool      `json:"player_wins"`
 }
 
 type player struct {
@@ -37,19 +40,18 @@ func NewSession(numOfPlayers int) (*Session, customerror.Error) {
 		return nil, customerror.NewBadRequestError("Max number of players is " + strconv.Itoa(maxPlayers))
 	}
 	tiles := allTiles(maxNumOfPips)
-	rand.Seed(time.Now().UnixNano())
 	rand.Shuffle(numOfTiles(maxNumOfPips), func(i, j int) { (*tiles)[i], (*tiles)[j] = (*tiles)[j], (*tiles)[i] })
-	players := make([]player, numOfPlayers)
+	players := make([]*player, numOfPlayers)
 	var realPlayer player
 	playerTiles := (*tiles)[0:tilesPerPlayer]
 	realPlayer.Tiles = &playerTiles
-	players[0] = realPlayer
+	players[0] = &realPlayer
 	for i := 1; i < numOfPlayers; i++ {
 		var p player
 		p.IsBot = true
 		playerTiles := (*tiles)[i*tilesPerPlayer : ((i + 1) * tilesPerPlayer)]
 		p.Tiles = &playerTiles
-		players[i] = p
+		players[i] = &p
 	}
 	remainingTiles := (*tiles)[0:(numOfTiles(maxNumOfPips) - tilesPerPlayer*numOfPlayers)]
 	doubleFound := orderPlayers(&players)
@@ -58,10 +60,144 @@ func NewSession(numOfPlayers int) (*Session, customerror.Error) {
 	}
 	playedTiles := make([]tile, 0)
 	s.PlayedTiles = &playedTiles
-	s.Players = &players
+	s.Players = players
 	s.RemainingTiles = &remainingTiles
 
+	s.preGame()
 	return &s, nil
+}
+
+func (s *Session) endGame() {
+	s.Gameover = true
+	for _, p := range s.Players {
+		if len(*p.Tiles) == 0 {
+			if !p.IsBot {
+				s.Playerwins = true
+				return
+			}
+			return
+		}
+	}
+	var winner player
+	var lowestScore int
+	for _, p := range s.Players {
+		var score int
+		for _, t := range *p.Tiles {
+			score += t.Left + t.Right
+		}
+		if score < lowestScore || lowestScore == 0 {
+			lowestScore = score
+			winner = *p
+		}
+	}
+	if !winner.IsBot {
+		s.Playerwins = true
+	}
+}
+
+func (s *Session) botTurn(p *player) error {
+	var tilePlaced bool
+	for i, t := range *p.Tiles {
+		err := s.placeTile(t)
+		if err == nil {
+			tilePlaced = true
+			*p.Tiles = removeTile(*p.Tiles, i)
+			break
+		}
+	}
+	if !tilePlaced {
+		return s.drawTile(p)
+	}
+
+	return nil
+}
+
+func (s *Session) placeTile(t tile) error {
+	leftTile := (*s.PlayedTiles)[0]
+	rightTile := (*s.PlayedTiles)[len(*s.PlayedTiles)-1]
+	var placeLeft bool
+	if t.Left == leftTile.Left {
+		placeLeft = true
+		t.Left, t.Right = t.Right, t.Left
+	} else if t.Right == leftTile.Right {
+		placeLeft = true
+	} else if t.Left == rightTile.Right {
+		placeLeft = false
+	} else if t.Right == rightTile.Right {
+		placeLeft = false
+		t.Left, t.Right = t.Right, t.Left
+	} else {
+		return errors.New("Illegal move")
+	}
+
+	if placeLeft {
+		*s.PlayedTiles = append([]tile{t}, *s.PlayedTiles...)
+	} else {
+		*s.PlayedTiles = append(*s.PlayedTiles, t)
+	}
+
+	return nil
+}
+
+func (s *Session) drawTile(p *player) error {
+	if len(*s.RemainingTiles) == 0 {
+		return errors.New("Out of tiles")
+	}
+	randIndex := rand.Intn(len(*s.RemainingTiles))
+	randTile := (*s.RemainingTiles)[randIndex]
+	*p.Tiles = append(*p.Tiles, randTile)
+	*s.RemainingTiles = removeTile(*s.RemainingTiles, randIndex)
+
+	return nil
+}
+
+// func (s *Session) playableTiles(p *player) []tile {
+// 	leftTile := (*s.PlayedTiles)[0]
+// 	rightTile := (*s.PlayedTiles)[len(*s.PlayedTiles)-1]
+// 	var playableTiles []tile
+// 	for _, t := range *p.Tiles {
+// 		if t.Left == leftTile.Left || t.Right == leftTile.Left || t.Left == rightTile.Right || t.Right == rightTile.Right {
+// 			playableTiles = append(playableTiles, t)
+// 		}
+// 	}
+
+// 	return playableTiles
+// }
+
+func (s *Session) preGame() {
+	s.playHighestDouble((s.Players)[0])
+	i := 1
+	for i < len(s.Players) {
+		s.PlayersTurn = i
+		if !(*s.Players[i]).IsBot {
+			break
+		}
+		err := s.botTurn(s.Players[i])
+		if err != nil {
+			s.endGame()
+			return
+		}
+		i++
+	}
+}
+
+func (s *Session) playHighestDouble(p *player) {
+	highestDouble := tile{Left: -1, Right: -1}
+	var iOfHighestDouble int
+	for i, t := range *p.Tiles {
+		if t.Left == t.Right {
+			if t.Left > highestDouble.Left {
+				iOfHighestDouble = i
+				highestDouble = t
+			}
+		}
+	}
+	*p.Tiles = removeTile(*p.Tiles, iOfHighestDouble)
+	*s.PlayedTiles = append(*s.PlayedTiles, highestDouble)
+}
+
+func removeTile(ts []tile, index int) []tile {
+	return append(ts[:index], ts[index+1:]...)
 }
 
 func allTiles(maxNumOfPips int) *[]tile {
@@ -81,7 +217,7 @@ func numOfTiles(maxNumOfPips int) int {
 	return (int(math.Pow(float64(maxNumOfPips), 2)) + 3*maxNumOfPips + 2) / 2
 }
 
-func orderPlayers(players *[]player) bool {
+func orderPlayers(players *[]*player) bool {
 	iPlayerOne, doubleFound := indexOfPlayerOne(players)
 	if !doubleFound {
 		return doubleFound
@@ -90,7 +226,7 @@ func orderPlayers(players *[]player) bool {
 	return true
 }
 
-func indexOfPlayerOne(players *[]player) (int, bool) {
+func indexOfPlayerOne(players *[]*player) (int, bool) {
 	highestDouble := tile{Left: -1, Right: -1}
 	var doubleFound bool
 	iOfPlayerOne := 0
