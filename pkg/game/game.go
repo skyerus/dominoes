@@ -21,6 +21,14 @@ type Session struct {
 	Playerwins     bool      `json:"player_wins"`
 }
 
+// FormattedSession - for front-end
+type FormattedSession struct {
+	MyTiles     []tile `json:"my_tiles"`
+	Gameover    bool   `json:"gameover"`
+	Playerwins  bool   `json:"player_wins"`
+	PlayedTiles []tile `json:"played_tiles"`
+}
+
 type player struct {
 	IsBot bool    `json:"isBot"`
 	Tiles *[]tile `json:"tiles"`
@@ -67,6 +75,24 @@ func NewSession(numOfPlayers int) (*Session, customerror.Error) {
 
 	s.preGame()
 	return &s, nil
+}
+
+// FormatSession - format session for front
+func FormatSession(s *Session) FormattedSession {
+	var fSession FormattedSession
+	var me *player
+	for _, p := range s.Players {
+		if !p.IsBot {
+			me = p
+			break
+		}
+	}
+	fSession.MyTiles = *me.Tiles
+	fSession.Gameover = s.Gameover
+	fSession.Playerwins = s.Playerwins
+	fSession.PlayedTiles = *s.PlayedTiles
+
+	return fSession
 }
 
 func (s *Session) endGame() {
