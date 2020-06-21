@@ -32,9 +32,10 @@ func (a *App) Initialize(sessions *game.Sessions) {
 
 func (a *App) setRouters(router *router) {
 	// Base routes
-	a.Router.HandleFunc("/", healthCheck).Methods("GET", "OPTIONS")
-	a.Router.HandleFunc("/api/new_game", router.newGame)
-	a.Router.HandleFunc("/api/play_turn/{index}", router.playTurn)
+	a.Router.HandleFunc("/api/session", router.currentSession).Methods("GET", "OPTIONS")
+	a.Router.HandleFunc("/api/new_game", router.newGame).Methods("POST", "OPTIONS")
+	a.Router.HandleFunc("/api/play_turn/{index}", router.playTurn).Methods("POST", "OPTIONS")
+	a.Router.PathPrefix("/").Handler(http.FileServer(http.Dir("./web/dist")))
 }
 
 // Run - Run the app
