@@ -5,12 +5,14 @@ import (
 	"math"
 	"math/rand"
 	"strconv"
+	"sync"
 
 	"github.com/skyerus/dominoes/pkg/customerror"
 )
 
 // Session - game session state
 type Session struct {
+	mux            sync.Mutex
 	Players        []*player `json:"players"`
 	PlayedTiles    *[]tile   `json:"played_tiles"`
 	RemainingTiles *[]tile   `json:"remaining_tiles"`
@@ -96,20 +98,47 @@ func (s *Session) endGame() {
 }
 
 func (s *Session) botTurn(p *player) error {
-	var tilePlaced bool
 	for i, t := range *p.Tiles {
 		err := s.placeTile(t)
 		if err == nil {
-			tilePlaced = true
 			*p.Tiles = removeTile(*p.Tiles, i)
-			break
+			s.incrementTurn()
+			return nil
 		}
 	}
-	if !tilePlaced {
-		return s.drawTile(p)
-	}
+	err := s.drawTile(p)
+	s.incrementTurn()
 
+	return err
+}
+
+// PlayTurn - user plays their turn
+func (s *Session) PlayTurn(tileIndex int) customerror.Error {
+	s.mux.Lock()
+	defer s.mux.Unlock()
+	if s.Players[s.PlayersTurn].IsBot {
+		return customerror.NewBadRequestError("Not your turn")
+	}
+	if tileIndex > len(*s.Players[s.PlayersTurn].Tiles)-1 {
+		return customerror.NewBadRequestError("Invalid tile")
+	}
+	t := (*s.Players[s.PlayersTurn].Tiles)[tileIndex]
+	err := s.placeTile(t)
+	if err != nil {
+		return customerror.NewBadRequestError("Invalid tile")
+	}
+	*s.Players[s.PlayersTurn].Tiles = removeTile(*s.Players[s.PlayersTurn].Tiles, tileIndex)
+	s.incrementTurn()
+	s.playBotTurns()
 	return nil
+}
+
+func (s *Session) incrementTurn() {
+	if s.PlayersTurn == len(s.Players)-1 {
+		s.PlayersTurn = 0
+		return
+	}
+	s.PlayersTurn++
 }
 
 func (s *Session) placeTile(t tile) error {
@@ -119,7 +148,7 @@ func (s *Session) placeTile(t tile) error {
 	if t.Left == leftTile.Left {
 		placeLeft = true
 		t.Left, t.Right = t.Right, t.Left
-	} else if t.Right == leftTile.Right {
+	} else if t.Right == leftTile.Left {
 		placeLeft = true
 	} else if t.Left == rightTile.Right {
 		placeLeft = false
@@ -151,33 +180,31 @@ func (s *Session) drawTile(p *player) error {
 	return nil
 }
 
-// func (s *Session) playableTiles(p *player) []tile {
-// 	leftTile := (*s.PlayedTiles)[0]
-// 	rightTile := (*s.PlayedTiles)[len(*s.PlayedTiles)-1]
-// 	var playableTiles []tile
-// 	for _, t := range *p.Tiles {
-// 		if t.Left == leftTile.Left || t.Right == leftTile.Left || t.Left == rightTile.Right || t.Right == rightTile.Right {
-// 			playableTiles = append(playableTiles, t)
-// 		}
-// 	}
-
-// 	return playableTiles
-// }
-
-func (s *Session) preGame() {
-	s.playHighestDouble((s.Players)[0])
-	i := 1
-	for i < len(s.Players) {
-		s.PlayersTurn = i
-		if !(*s.Players[i]).IsBot {
-			break
+func (s *Session) playBotTurns() {
+	for {
+		if !s.Players[s.PlayersTurn].IsBot {
+			return
 		}
-		err := s.botTurn(s.Players[i])
+		err := s.botTurn(s.Players[s.PlayersTurn])
 		if err != nil {
 			s.endGame()
 			return
 		}
-		i++
+	}
+}
+
+func (s *Session) preGame() {
+	s.playHighestDouble((s.Players)[0])
+	s.incrementTurn()
+	for s.PlayersTurn != 0 {
+		if !(*s.Players[s.PlayersTurn]).IsBot {
+			break
+		}
+		err := s.botTurn(s.Players[s.PlayersTurn])
+		if err != nil {
+			s.endGame()
+			return
+		}
 	}
 }
 

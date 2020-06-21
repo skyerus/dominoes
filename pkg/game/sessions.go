@@ -30,6 +30,13 @@ func (s *Sessions) NewSession(id string, numOfPlayers int) (*Session, customerro
 	return session, nil
 }
 
+// FetchSession - fetch game session
+func (s *Sessions) FetchSession(id string) *Session {
+	s.mux.Lock()
+	defer s.mux.Unlock()
+	return s.sessions[id]
+}
+
 // DeleteSession - delete game session from store
 func (s *Sessions) DeleteSession(id string) {
 	s.mux.Lock()

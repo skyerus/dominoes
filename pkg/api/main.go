@@ -34,6 +34,7 @@ func (a *App) setRouters(router *router) {
 	// Base routes
 	a.Router.HandleFunc("/", healthCheck).Methods("GET", "OPTIONS")
 	a.Router.HandleFunc("/api/new_game", router.newGame)
+	a.Router.HandleFunc("/api/play_turn/{index}", router.playTurn)
 }
 
 // Run - Run the app
