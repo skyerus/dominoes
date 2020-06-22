@@ -18,6 +18,19 @@ const useStyles = makeStyles(theme => ({
   playerDominoContainer: {
     marginLeft: "7px",
     marginRight: "7px",
+  },
+  boardContainer: {
+    marginTop: "20%",
+    display: "flex",
+    justifyItems: "center",
+    overflowX: "auto",
+    marginLeft: "20px",
+    marginRight: "20px",
+    paddingBottom: "4px",
+  },
+  boardDominoContainer: {
+    marginLeft: "3px",
+    marginRight: "3px",
   }
 }))
 
@@ -47,12 +60,33 @@ export default function Game(props) {
     })
   }
 
+  const playTurn = (index) => {
+    coreApi.playTurn(index).then(res => {
+      setGameState(res.data)
+    }).catch(e => {
+      props.snack("error", e.response.data.message)
+    })
+  }
+
   return gameState && (
     <div>
+      <div className={classes.boardContainer}>
+        {
+          gameState.played_tiles.map((t, i) =>
+            <div className={classes.boardDominoContainer}>
+              <Domino key={i}
+                      left={t.left} 
+                      right={t.right}
+                      vertical={false}
+              />
+            </div>
+          )
+        }
+      </div>
       <div className={classes.playerTilesContainer}>
         {
           gameState.my_tiles.map((t, i) =>
-            <div className={classes.playerDominoContainer}>
+            <div className={classes.playerDominoContainer} onClick={() => playTurn(i)}>
               <Domino key={i}
                       left={t.left} 
                       right={t.right} 
