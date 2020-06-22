@@ -20,6 +20,13 @@ const api = {
       method: "post",
       url: `/api/play_turn/${index}`
     })
+  },
+
+  draw: function() {
+    return axios({
+      method: "post",
+      url: `/api/draw`
+    })
   }
   
 }

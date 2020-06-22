@@ -74,3 +74,25 @@ func (router *router) playTurn(w http.ResponseWriter, r *http.Request) {
 
 	respondJSON(w, http.StatusOK, game.FormatSession(session))
 }
+
+func (router *router) drawTile(w http.ResponseWriter, r *http.Request) {
+	sessionCookie, err := r.Cookie("session-id")
+	if err != nil {
+		respondBadRequest(w)
+		return
+	}
+	sessionID := sessionCookie.Value
+	session := router.sessions.FetchSession(sessionID)
+	if session == nil {
+		respondBadRequest(w)
+		return
+	}
+
+	customErr := session.DrawTile()
+	if customErr != nil {
+		handleError(w, customErr)
+		return
+	}
+
+	respondJSON(w, http.StatusOK, game.FormatSession(session))
+}

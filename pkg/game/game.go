@@ -23,10 +23,11 @@ type Session struct {
 
 // FormattedSession - for front-end
 type FormattedSession struct {
-	MyTiles     []tile `json:"my_tiles"`
-	Gameover    bool   `json:"gameover"`
-	Playerwins  bool   `json:"player_wins"`
-	PlayedTiles []tile `json:"played_tiles"`
+	MyTiles        []tile `json:"my_tiles"`
+	Gameover       bool   `json:"gameover"`
+	Playerwins     bool   `json:"player_wins"`
+	PlayedTiles    []tile `json:"played_tiles"`
+	RemainingTiles int    `json:"remaining_tiles"`
 }
 
 type player struct {
@@ -77,6 +78,44 @@ func NewSession(numOfPlayers int) (*Session, customerror.Error) {
 	return &s, nil
 }
 
+// PlayTurn - user plays their turn
+func (s *Session) PlayTurn(tileIndex int) customerror.Error {
+	s.mux.Lock()
+	defer s.mux.Unlock()
+	if s.Players[s.PlayersTurn].IsBot {
+		return customerror.NewBadRequestError("Not your turn")
+	}
+	if tileIndex > len(*s.Players[s.PlayersTurn].Tiles)-1 {
+		return customerror.NewBadRequestError("Invalid tile")
+	}
+	t := (*s.Players[s.PlayersTurn].Tiles)[tileIndex]
+	err := s.placeTile(t)
+	if err != nil {
+		return customerror.NewBadRequestError("Invalid tile")
+	}
+	*s.Players[s.PlayersTurn].Tiles = removeTile(*s.Players[s.PlayersTurn].Tiles, tileIndex)
+	s.incrementTurn()
+	s.playBotTurns()
+	return nil
+}
+
+// DrawTile - player draws tile
+func (s *Session) DrawTile() customerror.Error {
+	s.mux.Lock()
+	defer s.mux.Unlock()
+	if s.Players[s.PlayersTurn].IsBot {
+		return customerror.NewBadRequestError("Not your turn")
+	}
+	err := s.drawTile(s.Players[s.PlayersTurn])
+	if err != nil {
+		s.endGame()
+		return nil
+	}
+	s.incrementTurn()
+	s.playBotTurns()
+	return nil
+}
+
 // FormatSession - format session for front
 func FormatSession(s *Session) FormattedSession {
 	var fSession FormattedSession
@@ -91,6 +130,7 @@ func FormatSession(s *Session) FormattedSession {
 	fSession.Gameover = s.Gameover
 	fSession.Playerwins = s.Playerwins
 	fSession.PlayedTiles = *s.PlayedTiles
+	fSession.RemainingTiles = len(*s.RemainingTiles)
 
 	return fSession
 }
@@ -136,27 +176,6 @@ func (s *Session) botTurn(p *player) error {
 	s.incrementTurn()
 
 	return err
-}
-
-// PlayTurn - user plays their turn
-func (s *Session) PlayTurn(tileIndex int) customerror.Error {
-	s.mux.Lock()
-	defer s.mux.Unlock()
-	if s.Players[s.PlayersTurn].IsBot {
-		return customerror.NewBadRequestError("Not your turn")
-	}
-	if tileIndex > len(*s.Players[s.PlayersTurn].Tiles)-1 {
-		return customerror.NewBadRequestError("Invalid tile")
-	}
-	t := (*s.Players[s.PlayersTurn].Tiles)[tileIndex]
-	err := s.placeTile(t)
-	if err != nil {
-		return customerror.NewBadRequestError("Invalid tile")
-	}
-	*s.Players[s.PlayersTurn].Tiles = removeTile(*s.Players[s.PlayersTurn].Tiles, tileIndex)
-	s.incrementTurn()
-	s.playBotTurns()
-	return nil
 }
 
 func (s *Session) incrementTurn() {
