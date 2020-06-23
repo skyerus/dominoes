@@ -94,6 +94,10 @@ func (s *Session) PlayTurn(tileIndex int) customerror.Error {
 		return customerror.NewBadRequestError("Invalid tile")
 	}
 	*s.Players[s.PlayersTurn].Tiles = removeTile(*s.Players[s.PlayersTurn].Tiles, tileIndex)
+	if len(*s.Players[s.PlayersTurn].Tiles) == 0 {
+		s.endGame()
+		return nil
+	}
 	s.incrementTurn()
 	s.playBotTurns()
 	return nil
@@ -168,6 +172,9 @@ func (s *Session) botTurn(p *player) error {
 		err := s.placeTile(t)
 		if err == nil {
 			*p.Tiles = removeTile(*p.Tiles, i)
+			if len(*p.Tiles) == 0 {
+				return errors.New("Bot won")
+			}
 			s.incrementTurn()
 			return nil
 		}

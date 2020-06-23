@@ -13,7 +13,7 @@ WORKDIR /
 RUN go build -gcflags "all=-N -l" -o /dominoes
 
 # Final stage
-FROM golang:1.14.4-alpine3.12
+FROM alpine:3.12.0
 
 ENV CGO_ENABLED 0
 RUN apk add --no-cache libc6-compat
